@@ -1,17 +1,29 @@
 #include "capture/packet_capture.h"
+#include "analyser/flow_tracker.h"
 #include <iostream>
 
-// this is the function we pass to startCapture
-// it gets called once per packet with the parsed info
+// global FlowTracker — updated for every packet
+FlowTracker tracker;
+
 void onPacket(const PacketInfo& pkt) {
-    std::cout << "[" << pkt.protocol << "] "
-              << pkt.src_ip << " -> " << pkt.dst_ip
-              << "  (" << pkt.size_bytes << " bytes)\n";
+    // skip non-TCP packets for RTT analysis
+    if (pkt.protocol != "TCP") return;
+
+    tracker.processPacket(
+        pkt.src_ip, pkt.dst_ip,
+        pkt.src_port, pkt.dst_port,
+        6,
+        pkt.seq_num, pkt.ack_num,
+        pkt.is_syn, pkt.is_ack,
+        pkt.size_bytes,
+        pkt.timestamp
+    );
 }
 
 int main() {
     std::string pcapFile = "data/sample.pcap";
-    std::cout << "Reading packets from " << pcapFile << "...\n\n";
+    std::cout << "Analysing " << pcapFile << "...\n";
     startCapture(pcapFile, onPacket);
+    tracker.printSummary();
     return 0;
 }
