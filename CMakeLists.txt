@@ -9,6 +9,7 @@ add_executable(network_monitor
     src/main.cpp
     src/capture/packet_capture.cpp
     src/analyser/flow_tracker.cpp
+    src/analyser/fairness.cpp
 )
 
 target_include_directories(network_monitor PRIVATE src)

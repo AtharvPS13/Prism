@@ -1,12 +1,11 @@
 #include "capture/packet_capture.h"
 #include "analyser/flow_tracker.h"
+#include "analyser/fairness.h"
 #include <iostream>
 
-// global FlowTracker — updated for every packet
 FlowTracker tracker;
 
 void onPacket(const PacketInfo& pkt) {
-    // skip non-TCP packets for RTT analysis
     if (pkt.protocol != "TCP") return;
 
     tracker.processPacket(
@@ -24,6 +23,13 @@ int main() {
     std::string pcapFile = "data/sample.pcap";
     std::cout << "Analysing " << pcapFile << "...\n";
     startCapture(pcapFile, onPacket);
+
+    // print flow level details
     tracker.printSummary();
+
+    // print fairness analysis across all flows
+    FairnessReport report = computeFairness(tracker.getFlows());
+    printFairnessReport(report);
+
     return 0;
 }
