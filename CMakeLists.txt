@@ -10,7 +10,8 @@ add_executable(network_monitor
     src/capture/packet_capture.cpp
     src/analyser/flow_tracker.cpp
     src/analyser/fairness.cpp
+    src/emitter/json_emitter.cpp
 )
 
 target_include_directories(network_monitor PRIVATE src)
-target_link_libraries(network_monitor ${PCAP_LIB})
+target_link_libraries(network_monitor ${PCAP_LIB} pthread)
