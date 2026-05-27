@@ -24,6 +24,7 @@ static void pcapHandler(u_char* userData,
     info.src_ip    = inet_ntoa(src_addr);
     info.dst_ip    = inet_ntoa(dst_addr);
     info.size_bytes = pkthdr->len;
+    info.ttl        = ip->ttl;
 
     // timestamp from pcap header — seconds + microseconds
     info.timestamp = pkthdr->ts.tv_sec + pkthdr->ts.tv_usec / 1e6;

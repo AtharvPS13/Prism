@@ -4,11 +4,13 @@
 #include "analyser/flow_tracker.h"
 #include "analyser/fairness.h"
 #include "analyser/classifier.h"
+#include "analyser/topology.h"
 
 std::string buildJson(
     const std::unordered_map<std::string, FlowStats>& flows,
     const FairnessReport& report,
-    const TrafficClassifier& classifier);
+    const TrafficClassifier& classifier,
+    const TopologyInferrer& topology);
 
 void startHttpServer(int port);
 void updateSnapshot(const std::string& json);

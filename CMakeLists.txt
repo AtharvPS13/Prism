@@ -11,6 +11,7 @@ add_executable(network_monitor
     src/analyser/flow_tracker.cpp
     src/analyser/fairness.cpp
     src/analyser/classifier.cpp
+    src/analyser/topology.cpp
     src/emitter/json_emitter.cpp
 )
 

@@ -2,6 +2,7 @@
 #include "analyser/flow_tracker.h"
 #include "analyser/fairness.h"
 #include "analyser/classifier.h"
+#include "analyser/topology.h"
 #include "emitter/json_emitter.h"
 #include <iostream>
 #include <thread>
@@ -9,6 +10,7 @@
 
 FlowTracker       tracker;
 TrafficClassifier classifier;
+TopologyInferrer  topology;
 
 void onPacket(const PacketInfo& pkt) {
     if (pkt.protocol != "TCP") return;
@@ -32,12 +34,13 @@ void onPacket(const PacketInfo& pkt) {
                    "<->" + pkt.src_ip + ":" + std::to_string(pkt.src_port);
 
     classifier.updateProfile(
-        flow_key,
-        pkt.src_ip,
-        pkt.src_ip,
-        pkt.size_bytes,
-        pkt.timestamp
+        flow_key, pkt.src_ip, pkt.src_ip,
+        pkt.size_bytes, pkt.timestamp
     );
+
+    // observe TTL from incoming packets (src → us)
+    // TTL tells us how many hops the packet travelled
+    topology.observePacket(pkt.src_ip, pkt.ttl);
 }
 
 int main() {
@@ -55,9 +58,10 @@ int main() {
     printFairnessReport(report);
 
     classifier.printClassifications();
+    topology.printTopology();
 
-    // pass classifier to buildJson
-    std::string json = buildJson(tracker.getFlows(), report, classifier);
+    std::string json = buildJson(
+        tracker.getFlows(), report, classifier, topology);
     updateSnapshot(json);
 
     std::cout << "\nServing data at http://localhost:8080\n";

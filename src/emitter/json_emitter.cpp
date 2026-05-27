@@ -26,7 +26,8 @@ static std::string jsonStr(const std::string& s) {
 std::string buildJson(
     const std::unordered_map<std::string, FlowStats>& flows,
     const FairnessReport& report,
-    const TrafficClassifier& classifier)
+    const TrafficClassifier& classifier,
+    const TopologyInferrer& topology)
 {
     std::ostringstream j;
     j << std::fixed << std::setprecision(3);
@@ -70,6 +71,23 @@ std::string buildJson(
         j << "    }";
     }
 
+    j << "\n  ],\n";
+
+    // topology section
+    j << "  \"hosts\": [\n";
+    bool firstHost = true;
+    for (const auto& [ip, host] : topology.getHosts()) {
+        if (!firstHost) j << ",\n";
+        firstHost = false;
+        j << "    {\n";
+        j << "      \"ip\": "        << jsonStr(ip)             << ",\n";
+        j << "      \"ttl\": "       << host.observed_ttl       << ",\n";
+        j << "      \"hops\": "      << host.hops               << ",\n";
+        j << "      \"os_guess\": "  << jsonStr(host.os_guess)  << ",\n";
+        j << "      \"proximity\": " << jsonStr(host.proximity) << ",\n";
+        j << "      \"packets\": "   << host.packet_count       << "\n";
+        j << "    }";
+    }
     j << "\n  ]\n}";
     return j.str();
 }

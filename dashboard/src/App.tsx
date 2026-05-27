@@ -18,6 +18,15 @@ interface Flow {
   reason: string;
 }
 
+interface Host {
+  ip: string;
+  ttl: number;
+  hops: number;
+  os_guess: string;
+  proximity: string;
+  packets: number;
+}
+
 interface Snapshot {
   timestamp: number;
   fairness_index: number;
@@ -25,6 +34,7 @@ interface Snapshot {
   worst_hog: string;
   hog_percent: number;
   flows: Flow[];
+  hosts: Host[];
 }
 
 function fairnessColor(index: number): string {
@@ -281,6 +291,75 @@ export default function App() {
               </table>
             </div>
           </div>
+          {/* Topology table */}
+          {data.hosts && data.hosts.length > 0 && (
+            <div style={{ background: "#f9fafb", borderRadius: "12px",
+                          border: "1px solid #e5e7eb", overflow: "hidden",
+                          marginTop: "24px" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb" }}>
+                <p style={{ fontSize: "14px", fontWeight: 500, margin: 0 }}>
+                  Network topology
+                </p>
+                <p style={{ fontSize: "12px", color: "#6b7280", margin: "4px 0 0" }}>
+                  Inferred from TTL values — no packets sent
+                </p>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse",
+                                fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ background: "#f3f4f6" }}>
+                      {["Host IP", "TTL", "Hops", "OS guess", "Proximity", "Packets"]
+                        .map(h => (
+                          <th key={h} style={{ padding: "10px 16px", textAlign: "left",
+                                               fontWeight: 500, color: "#374151",
+                                               whiteSpace: "nowrap" }}>
+                            {h}
+                          </th>
+                        ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.hosts]
+                      .sort((a, b) => a.hops - b.hops)
+                      .map((host, i) => (
+                        <tr key={i} style={{ borderTop: "1px solid #e5e7eb",
+                                             background: "white" }}>
+                          <td style={{ padding: "10px 16px", fontFamily: "monospace",
+                                       color: "#374151" }}>
+                            {host.ip}
+                          </td>
+                          <td style={{ padding: "10px 16px", color: "#6b7280" }}>
+                            {host.ttl}
+                          </td>
+                          <td style={{ padding: "10px 16px" }}>
+                            <span style={{
+                              background: host.hops <= 1 ? "#f0fdf4"
+                                        : host.hops <= 8 ? "#eff6ff" : "#fff7ed",
+                              color: host.hops <= 1 ? "#15803d"
+                                   : host.hops <= 8 ? "#1d4ed8" : "#c2410c",
+                              padding: "2px 8px", borderRadius: "4px",
+                              fontSize: "11px", fontWeight: 500
+                            }}>
+                              {host.hops} hops
+                            </span>
+                          </td>
+                          <td style={{ padding: "10px 16px", color: "#374151" }}>
+                            {host.os_guess}
+                          </td>
+                          <td style={{ padding: "10px 16px", color: "#6b7280" }}>
+                            {host.proximity}
+                          </td>
+                          <td style={{ padding: "10px 16px", color: "#6b7280" }}>
+                            {host.packets}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
