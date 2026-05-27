@@ -10,6 +10,7 @@ add_executable(network_monitor
     src/capture/packet_capture.cpp
     src/analyser/flow_tracker.cpp
     src/analyser/fairness.cpp
+    src/analyser/classifier.cpp
     src/emitter/json_emitter.cpp
 )
 
