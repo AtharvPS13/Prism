@@ -4,6 +4,7 @@
 #include "analyser/classifier.h"
 #include "analyser/topology.h"
 #include "emitter/json_emitter.h"
+#include "recorder/event_recorder.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -11,6 +12,7 @@
 FlowTracker       tracker;
 TrafficClassifier classifier;
 TopologyInferrer  topology;
+EventRecorder     recorder;
 
 void onPacket(const PacketInfo& pkt) {
     if (pkt.protocol != "TCP") return;
@@ -38,9 +40,18 @@ void onPacket(const PacketInfo& pkt) {
         pkt.size_bytes, pkt.timestamp
     );
 
-    // observe TTL from incoming packets (src → us)
-    // TTL tells us how many hops the packet travelled
     topology.observePacket(pkt.src_ip, pkt.ttl);
+
+    // record events into ring buffer
+    // compute fairness first so we can pass it to recorder
+    FairnessReport report = computeFairness(tracker.getFlows());
+
+    // record event for this flow
+    const auto& flows = tracker.getFlows();
+    auto it = flows.find(flow_key);
+    if (it != flows.end()) {
+        recorder.record(flow_key, it->second, report, pkt.timestamp);
+    }
 }
 
 int main() {
@@ -48,6 +59,7 @@ int main() {
 
     startHttpServer(8080);
     std::cout << "HTTP server running on http://localhost:8080\n";
+    std::cout << "Ring buffer ready — recording all network events\n";
 
     std::cout << "Analysing " << pcapFile << "...\n";
     startCapture(pcapFile, onPacket);
@@ -59,6 +71,8 @@ int main() {
 
     classifier.printClassifications();
     topology.printTopology();
+
+    std::cout << "\nAnomalies recorded: " << recorder.anomalyCount() << "\n";
 
     std::string json = buildJson(
         tracker.getFlows(), report, classifier, topology);

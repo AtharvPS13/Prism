@@ -14,9 +14,9 @@ add_executable(network_monitor
     src/analyser/topology.cpp
     src/emitter/json_emitter.cpp
     src/recorder/ring_buffer.cpp
+    src/recorder/event_recorder.cpp
 )
 
-# separate test binary — doesn't need pcap or the full project
 add_executable(ring_buffer_test
     src/recorder/ring_buffer_test.cpp
     src/recorder/ring_buffer.cpp
