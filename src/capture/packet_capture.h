@@ -14,8 +14,11 @@ struct PacketInfo {
     bool        is_syn    = false;
     bool        is_ack    = false;
     double      timestamp = 0.0;
-    int         ttl       = 0;    // TTL from IP header — new field
+    int         ttl       = 0;
 };
 
 void startCapture(const std::string& filepath,
                   void (*callback)(const PacketInfo&));
+
+void startLiveCapture(const std::string& interface,
+                      void (*callback)(const PacketInfo&));

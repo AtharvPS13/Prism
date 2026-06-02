@@ -15,6 +15,7 @@ add_executable(network_monitor
     src/emitter/json_emitter.cpp
     src/recorder/ring_buffer.cpp
     src/recorder/event_recorder.cpp
+    src/recorder/replay_engine.cpp
 )
 
 add_executable(ring_buffer_test
