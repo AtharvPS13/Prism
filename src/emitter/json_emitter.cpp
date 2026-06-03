@@ -10,87 +10,144 @@
 #include <ctime>
 
 static std::mutex  snapshot_mutex;
-static std::string latest_snapshot = "{}";
+static std::string latest_snapshot =
+    "{\"timestamp\":0,\"fairness_index\":1.0,\"total_flows\":0,"
+    "\"worst_hog\":\"\",\"hog_percent\":0.0,\"flows\":[],\"hosts\":[]}";
+
+// ─── JSON string escaping ─────────────────────────────────────────────────────
 
 static std::string jsonStr(const std::string& s) {
     std::string out = "\"";
     for (char c : s) {
-        if (c == '"')       out += "\\\"";
+        if      (c == '"')  out += "\\\"";
         else if (c == '\\') out += "\\\\";
-        else out += c;
+        else if (c == '\n') out += "\\n";
+        else                out += c;
     }
     out += "\"";
     return out;
 }
 
+// ─── buildJson ────────────────────────────────────────────────────────────────
+
 std::string buildJson(
     const std::unordered_map<std::string, FlowStats>& flows,
-    const FairnessReport& report,
+    const FairnessReport&    report,
     const TrafficClassifier& classifier,
-    const TopologyInferrer& topology)
+    const TopologyInferrer&  topology,
+    const TCPStateTracker&   tcp_tracker)
 {
     std::ostringstream j;
     j << std::fixed << std::setprecision(3);
 
     j << "{\n";
-    j << "  \"timestamp\": "     << (double)time(nullptr) << ",\n";
-    j << "  \"fairness_index\": " << report.index          << ",\n";
-    j << "  \"total_flows\": "    << report.total_flows     << ",\n";
-    j << "  \"worst_hog\": "      << jsonStr(report.worst_hog) << ",\n";
-    j << "  \"hog_percent\": "    << report.hog_percent     << ",\n";
+    j << "  \"timestamp\": "      << (double)time(nullptr)    << ",\n";
+    j << "  \"fairness_index\": " << report.index             << ",\n";
+    j << "  \"total_flows\": "    << report.total_flows        << ",\n";
+    j << "  \"worst_hog\": "      << jsonStr(report.worst_hog)<< ",\n";
+    j << "  \"hog_percent\": "    << report.hog_percent        << ",\n";
+
+    // ── flows ──────────────────────────────────────────────────────────────
     j << "  \"flows\": [\n";
-
-    bool first = true;
+    bool first_flow = true;
     for (const auto& [key, flow] : flows) {
-        if (!first) j << ",\n";
-        first = false;
+        if (!first_flow) j << ",\n";
+        first_flow = false;
 
-        // get classification for this flow
         ClassificationResult cls = classifier.classify(key);
 
+        // look up TCP state for this flow (may be null if not yet tracked)
+        const TCPFlowState* tcp = tcp_tracker.getState(key);
+
         j << "    {\n";
-        j << "      \"key\": "        << jsonStr(key)         << ",\n";
-        j << "      \"src_ip\": "     << jsonStr(flow.src_ip) << ",\n";
-        j << "      \"dst_ip\": "     << jsonStr(flow.dst_ip) << ",\n";
-        j << "      \"src_port\": "   << flow.src_port        << ",\n";
-        j << "      \"dst_port\": "   << flow.dst_port        << ",\n";
-        j << "      \"bytes\": "      << flow.total_bytes     << ",\n";
-        j << "      \"packets\": "    << flow.packet_count    << ",\n";
+        j << "      \"key\": "          << jsonStr(key)          << ",\n";
+        j << "      \"src_ip\": "       << jsonStr(flow.src_ip)  << ",\n";
+        j << "      \"dst_ip\": "       << jsonStr(flow.dst_ip)  << ",\n";
+        j << "      \"src_port\": "     << flow.src_port          << ",\n";
+        j << "      \"dst_port\": "     << flow.dst_port          << ",\n";
+        j << "      \"bytes\": "        << flow.total_bytes       << ",\n";
+        j << "      \"packets\": "      << flow.packet_count      << ",\n";
         j << "      \"avg_rtt_ms\": "
-          << (flow.rtt_samples > 0 ? flow.avg_rtt : -1.0)    << ",\n";
+          << (flow.rtt_samples > 0 ? flow.avg_rtt : -1.0)        << ",\n";
         j << "      \"max_rtt_ms\": "
-          << (flow.rtt_samples > 0 ? flow.max_rtt : -1.0)    << ",\n";
+          << (flow.rtt_samples > 0 ? flow.max_rtt : -1.0)        << ",\n";
         j << "      \"bufferbloat\": "
-          << (flow.bufferbloat ? "true" : "false")            << ",\n";
+          << (flow.bufferbloat ? "true" : "false")                << ",\n";
         j << "      \"is_hog\": "
-          << (key == report.worst_hog ? "true" : "false")     << ",\n";
-        j << "      \"traffic_type\": " << jsonStr(cls.label) << ",\n";
+          << (key == report.worst_hog ? "true" : "false")         << ",\n";
+        j << "      \"traffic_type\": " << jsonStr(cls.label)    << ",\n";
         j << "      \"confidence\": "
-          << (int)(cls.confidence * 100)                      << ",\n";
-        j << "      \"reason\": "    << jsonStr(cls.reason)   << "\n";
+          << (int)(cls.confidence * 100)                          << ",\n";
+        j << "      \"reason\": "       << jsonStr(cls.reason)   << ",\n";
+
+        // ── TCP congestion state ─────────────────────────────────────────
+        if (tcp && tcp->state != TCPState::UNKNOWN) {
+            j << "      \"tcp_state\": "
+              << jsonStr(tcpStateLabel(tcp->state))               << ",\n";
+            j << "      \"tcp_state_color\": "
+              << jsonStr(tcpStateColor(tcp->state))               << ",\n";
+            j << "      \"bytes_in_flight\": "
+              << std::setprecision(0) << tcp->bytes_in_flight     << ",\n";
+            j << "      \"retransmissions\": "  << tcp->retransmissions   << ",\n";
+            j << "      \"fast_recoveries\": "  << tcp->fast_recoveries   << ",\n";
+            j << "      \"timeouts_count\": "   << tcp->timeouts_count    << ",\n";
+            j << "      \"time_slow_start\": "
+              << std::setprecision(1) << tcp->time_slow_start             << ",\n";
+            j << "      \"time_cong_avoid\": "
+              << tcp->time_cong_avoid                                      << ",\n";
+            j << "      \"time_fast_recovery\": "
+              << tcp->time_fast_recovery                                   << ",\n";
+
+            // sawtooth history: compact array of [rel_t, bif_kb, state_label]
+            j << "      \"cwnd_history\": [";
+            bool first_pt = true;
+            for (const auto& pt : tcp->history) {
+                if (!first_pt) j << ",";
+                first_pt = false;
+                j << "[" << std::setprecision(2) << pt.t
+                  << "," << std::setprecision(1) << (pt.bytes_in_flight / 1024.0)
+                  << "," << jsonStr(tcpStateLabel(pt.state))
+                  << "]";
+            }
+            j << "]\n";
+        } else {
+            // no TCP state yet — provide safe defaults
+            j << "      \"tcp_state\": \"UNKNOWN\",\n";
+            j << "      \"tcp_state_color\": \"#4E6380\",\n";
+            j << "      \"bytes_in_flight\": 0,\n";
+            j << "      \"retransmissions\": 0,\n";
+            j << "      \"fast_recoveries\": 0,\n";
+            j << "      \"timeouts_count\": 0,\n";
+            j << "      \"time_slow_start\": 0.0,\n";
+            j << "      \"time_cong_avoid\": 0.0,\n";
+            j << "      \"time_fast_recovery\": 0.0,\n";
+            j << "      \"cwnd_history\": []\n";
+        }
         j << "    }";
     }
-
     j << "\n  ],\n";
 
-    // topology section
+    // ── topology hosts ─────────────────────────────────────────────────────
     j << "  \"hosts\": [\n";
-    bool firstHost = true;
+    bool first_host = true;
     for (const auto& [ip, host] : topology.getHosts()) {
-        if (!firstHost) j << ",\n";
-        firstHost = false;
+        if (!first_host) j << ",\n";
+        first_host = false;
         j << "    {\n";
-        j << "      \"ip\": "        << jsonStr(ip)             << ",\n";
-        j << "      \"ttl\": "       << host.observed_ttl       << ",\n";
-        j << "      \"hops\": "      << host.hops               << ",\n";
-        j << "      \"os_guess\": "  << jsonStr(host.os_guess)  << ",\n";
-        j << "      \"proximity\": " << jsonStr(host.proximity) << ",\n";
-        j << "      \"packets\": "   << host.packet_count       << "\n";
+        j << "      \"ip\": "        << jsonStr(ip)              << ",\n";
+        j << "      \"ttl\": "       << host.observed_ttl        << ",\n";
+        j << "      \"hops\": "      << host.hops                << ",\n";
+        j << "      \"os_guess\": "  << jsonStr(host.os_guess)   << ",\n";
+        j << "      \"proximity\": " << jsonStr(host.proximity)  << ",\n";
+        j << "      \"packets\": "   << host.packet_count        << "\n";
         j << "    }";
     }
     j << "\n  ]\n}";
+
     return j.str();
 }
+
+// ─── HTTP server ──────────────────────────────────────────────────────────────
 
 void updateSnapshot(const std::string& json) {
     std::lock_guard<std::mutex> lock(snapshot_mutex);

@@ -12,6 +12,7 @@ add_executable(network_monitor
     src/analyser/fairness.cpp
     src/analyser/classifier.cpp
     src/analyser/topology.cpp
+    src/analyser/tcp_state.cpp
     src/emitter/json_emitter.cpp
     src/recorder/ring_buffer.cpp
     src/recorder/event_recorder.cpp
