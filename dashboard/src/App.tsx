@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   AreaChart, Area, ComposedChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer,
-  Cell, CartesianGrid, ReferenceLine, BarChart, Bar
+  Cell, CartesianGrid, ReferenceLine, ReferenceArea, BarChart, Bar
 } from "recharts";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -158,7 +158,6 @@ function TCPStateBadge({ state }: { state: string }) {
 }
 
 // ─── Sawtooth Chart ───────────────────────────────────────────────────────────
-// Shows cwnd (bytes in flight) over time — the characteristic TCP sawtooth pattern
 
 function SawtoothChart({ history, currentState }: {
   history: [number, number, string][];
@@ -166,92 +165,178 @@ function SawtoothChart({ history, currentState }: {
 }) {
   if (!history || history.length < 3) {
     return (
-      <div style={{ height:120, display:"flex", alignItems:"center", justifyContent:"center", color:"#4E6380", fontSize:12 }}>
-        Collecting data — need at least 3 cwnd samples...
+      <div style={{ height: 200, display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 10,
+        background: "#080D1A", borderRadius: 8, border: "1px dashed #1C2E4A" }}>
+        <div style={{ fontSize: 28, animation: "pulse 2s infinite" }}>📡</div>
+        <p style={{ fontSize: 12, color: "#4E6380" }}>Collecting cwnd samples...</p>
+        <p style={{ fontSize: 11, color: "#2E4060" }}>Need at least 3 data points</p>
       </div>
     );
   }
 
-  // convert [t, bif_kb, state] tuples to chart-friendly objects
   const data = history.map(([t, bif, state]) => ({ t, bif, state }));
 
-  // find state transitions for reference lines
-  const transitions: { t: number; state: string }[] = [];
+  // build colored background regions per TCP state
+  const regions: { x1: number; x2: number; state: string }[] = [];
+  let regionStart = data[0].t;
+  let regionState = data[0].state;
   for (let i = 1; i < data.length; i++) {
-    if (data[i].state !== data[i-1].state) {
-      transitions.push({ t: data[i].t, state: data[i].state });
+    if (data[i].state !== regionState) {
+      regions.push({ x1: regionStart, x2: data[i].t, state: regionState });
+      regionStart = data[i].t;
+      regionState = data[i].state;
+    }
+  }
+  regions.push({ x1: regionStart, x2: data[data.length - 1].t, state: regionState });
+
+  // find packet loss events = first point entering FAST_RECOVERY
+  const lossEvents: number[] = [];
+  for (let i = 1; i < data.length; i++) {
+    if (data[i].state === "FAST_RECOVERY" && data[i-1].state !== "FAST_RECOVERY") {
+      lossEvents.push(data[i].t);
     }
   }
 
-  const stColor = TCP_STATE_INFO[currentState]?.color ?? "#3B82F6";
+  const maxBif = Math.max(...data.map(d => d.bif), 1);
 
-  // custom dot — color each point by its TCP state
   const CustomDot = (props: any) => {
     const { cx, cy, payload } = props;
+    if (!cx || !cy) return null;
     const c = TCP_STATE_INFO[payload.state]?.color ?? "#4E6380";
-    return <circle cx={cx} cy={cy} r={3} fill={c} strokeWidth={0} />;
+    const isLoss = payload.state === "FAST_RECOVERY";
+    return (
+      <circle cx={cx} cy={cy}
+        r={isLoss ? 5 : 3}
+        fill={c}
+        stroke={isLoss ? "#ffffff" : "none"}
+        strokeWidth={isLoss ? 1.5 : 0}
+      />
+    );
+  };
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload;
+    if (!d) return null;
+    const info = TCP_STATE_INFO[d.state] ?? TCP_STATE_INFO.UNKNOWN;
+    return (
+      <div style={{ background: "#0A1020", border: `1px solid ${info.color}66`,
+        borderRadius: 8, padding: "10px 14px", fontSize: 12, minWidth: 180 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: info.color }} />
+          <span style={{ color: info.color, fontWeight: 700, fontFamily: "'JetBrains Mono'", fontSize: 11 }}>
+            {d.state.replace("_", " ")}
+          </span>
+        </div>
+        <p style={{ color: "#E2E8F5", fontFamily: "'JetBrains Mono'", marginBottom: 3 }}>
+          cwnd = <strong>{d.bif.toFixed(1)} KB</strong>
+        </p>
+        <p style={{ color: "#4E6380", fontSize: 10 }}>t = {d.t.toFixed(1)}s</p>
+        <p style={{ color: "#6B7FA3", fontSize: 10, marginTop: 4, lineHeight: 1.5 }}>{info.desc}</p>
+      </div>
+    );
   };
 
   return (
     <div>
-      {/* state legend */}
-      <div style={{ display:"flex", gap:10, marginBottom:8, flexWrap:"wrap" }}>
-        {Object.entries(TCP_STATE_INFO).filter(([k]) => k !== "UNKNOWN").map(([state, info]) => (
-          <div key={state} style={{ display:"flex", alignItems:"center", gap:4 }}>
-            <div style={{ width:8, height:8, borderRadius:"50%", background:info.color }} />
-            <span style={{ fontSize:9, color:"#4E6380", fontFamily:"'JetBrains Mono'" }}>
-              {state.replace("_"," ")}
+      {/* state legend row */}
+      <div style={{ display: "flex", gap: 16, marginBottom: 12, flexWrap: "wrap" }}>
+        {Object.entries(TCP_STATE_INFO).filter(([k]) => k !== "UNKNOWN").map(([state, info]) => {
+          const count = data.filter(d => d.state === state).length;
+          if (count === 0) return null;
+          return (
+            <div key={state} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: info.color,
+                boxShadow: `0 0 4px ${info.color}88` }} />
+              <span style={{ fontSize: 11, color: "#94A3B8", fontFamily: "'JetBrains Mono'" }}>
+                {state.replace("_", " ")}
+              </span>
+              <span style={{ fontSize: 10, color: "#2E4060", fontFamily: "'JetBrains Mono'" }}>
+                ×{count}
+              </span>
+            </div>
+          );
+        })}
+        {lossEvents.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12 }}>⚠</span>
+            <span style={{ fontSize: 11, color: "#EF4444", fontFamily: "'JetBrains Mono'" }}>
+              {lossEvents.length} loss event{lossEvents.length > 1 ? "s" : ""}
             </span>
           </div>
-        ))}
+        )}
       </div>
 
-      <ResponsiveContainer width="100%" height={150}>
-        <ComposedChart data={data} margin={{ top:4, right:8, bottom:0, left:0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1C2E4A" />
-          <XAxis
-            dataKey="t"
-            tick={{ fontSize:9, fill:"#4E6380" }}
-            tickFormatter={v => `${v.toFixed(0)}s`}
-          />
-          <YAxis
-            tick={{ fontSize:9, fill:"#4E6380" }}
-            tickFormatter={v => `${v}KB`}
-            width={40}
-          />
-          <Tooltip
-            contentStyle={{ background:"#0A1020", border:"1px solid #1C2E4A", borderRadius:6, fontSize:11 }}
-            formatter={(v: any, _name: any, props: any) => {
-              const state = props?.payload?.state ?? "";
-              return [`${typeof v === "number" ? v.toFixed(1) : 0} KB — ${state.replace("_"," ")}`, "cwnd"] as [string, string];
-            }}
-            labelFormatter={v => `t = ${typeof v === "number" ? v.toFixed(1) : v}s`}
-          />
-          {/* state transition reference lines */}
-          {transitions.map((tr, i) => {
-            const c = TCP_STATE_INFO[tr.state]?.color ?? "#4E6380";
+      {/* main chart */}
+      <ResponsiveContainer width="100%" height={280}>
+        <ComposedChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+
+          {/* colored state background regions */}
+          {regions.map((r, i) => {
+            const c = TCP_STATE_INFO[r.state]?.color ?? "#4E6380";
             return (
-              <ReferenceLine
-                key={i}
-                x={tr.t}
-                stroke={c}
-                strokeDasharray="3 3"
-                strokeWidth={1}
-              />
+              <ReferenceArea key={i} x1={r.x1} x2={r.x2}
+                fill={c} fillOpacity={0.06} strokeOpacity={0} />
             );
           })}
+
+          <CartesianGrid strokeDasharray="3 3" stroke="#1C2E4A" />
+
+          <XAxis dataKey="t"
+            tick={{ fontSize: 10, fill: "#4E6380" }}
+            tickFormatter={v => `${typeof v === "number" ? v.toFixed(0) : v}s`}
+            label={{ value: "Time (seconds)", position: "insideBottom",
+              offset: -4, fill: "#4E6380", fontSize: 10 }}
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: "#4E6380" }}
+            tickFormatter={v => `${v}KB`}
+            domain={[0, Math.ceil(maxBif * 1.2)]}
+            width={48}
+            label={{ value: "cwnd", angle: -90, position: "insideLeft",
+              fill: "#4E6380", fontSize: 10 }}
+          />
+
+          <Tooltip content={<CustomTooltip />} />
+
+          {/* packet loss vertical markers */}
+          {lossEvents.map((t, i) => (
+            <ReferenceLine key={i} x={t} stroke="#EF4444" strokeWidth={1.5}
+              strokeDasharray="4 2"
+              label={{ value: "⚠", fill: "#EF4444", fontSize: 12, position: "top" }}
+            />
+          ))}
+
           {/* the sawtooth line */}
           <Line
             type="monotone"
             dataKey="bif"
-            stroke={stColor}
-            strokeWidth={2}
+            stroke="#3B82F6"
+            strokeWidth={2.5}
             dot={<CustomDot />}
-            activeDot={{ r:5 }}
+            activeDot={{ r: 6, fill: "#60A5FA" }}
             isAnimationActive={false}
           />
         </ComposedChart>
       </ResponsiveContainer>
+
+      {/* annotation below chart */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 8, marginTop: 12 }}>
+        {[
+          { color: "#10B981", title: "Climb (Slow Start)", desc: "cwnd doubles each RTT — exponential growth" },
+          { color: "#3B82F6", title: "Linear Growth (CA)", desc: "cwnd +1 MSS per RTT — careful increase" },
+          { color: "#EF4444", title: "⚠ Loss → Drop", desc: "3 dup ACKs detected — cwnd halved instantly" },
+        ].map(a => (
+          <div key={a.title} style={{ background: "#080D1A", border: `1px solid ${a.color}33`,
+            borderRadius: 6, padding: "8px 10px" }}>
+            <div style={{ width: 24, height: 3, background: a.color, borderRadius: 2, marginBottom: 5 }} />
+            <p style={{ fontSize: 11, fontWeight: 600, color: a.color, marginBottom: 3 }}>{a.title}</p>
+            <p style={{ fontSize: 10, color: "#4E6380", lineHeight: 1.5 }}>{a.desc}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -262,90 +347,104 @@ function TCPInternalsPanel({ flow }: { flow: Flow }) {
   const info    = TCP_STATE_INFO[flow.tcp_state] ?? TCP_STATE_INFO.UNKNOWN;
   const history = (flow.cwnd_history ?? []) as [number, number, string][];
   const totalTime = flow.time_slow_start + flow.time_cong_avoid + flow.time_fast_recovery;
+  const lossCount = history.reduce((n, [,, s], i) =>
+    i > 0 && s === "FAST_RECOVERY" && history[i-1][2] !== "FAST_RECOVERY" ? n+1 : n, 0);
 
   return (
-    <div style={{
-      borderTop: "1px solid #1C2E4A",
-      background: "#090E1C",
-      padding: "14px 18px",
-      animation: "fadeIn .25s ease",
-    }}>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+    <div style={{ borderTop: "1px solid #1C2E4A", background: "#050A14",
+      padding: "20px 20px 16px", animation: "fadeIn .25s ease" }}>
 
-        {/* current state card */}
-        <div style={{ background:info.bg, border:`1px solid ${info.color}44`, borderRadius:8, padding:"12px 14px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-            <div style={{ width:8, height:8, borderRadius:"50%", background:info.color,
-              animation: flow.tcp_state === "FAST_RECOVERY" ? "pulse 1.5s infinite" : "none" }} />
-            <span style={{ fontSize:12, fontWeight:700, color:info.color, fontFamily:"'JetBrains Mono'" }}>
-              {flow.tcp_state.replace("_"," ")}
-            </span>
-          </div>
-          <p style={{ fontSize:11, color:"#94A3B8", lineHeight:1.6 }}>{info.desc}</p>
-          <div style={{ marginTop:8, display:"flex", gap:8 }}>
-            <span style={{ fontSize:10, background:"#0A1020", border:"1px solid #1C2E4A",
-              borderRadius:4, padding:"2px 8px", fontFamily:"'JetBrains Mono'", color:"#CBD5E1" }}>
-              cwnd ≈ {(flow.bytes_in_flight / 1024).toFixed(1)} KB
-            </span>
-          </div>
+      {/* ── hero header ── */}
+      <div style={{ display: "flex", alignItems: "flex-start",
+        justifyContent: "space-between", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: "#E2E8F5", marginBottom: 4 }}>
+            TCP Congestion State Machine
+          </h3>
+          <p style={{ fontSize: 11, color: "#4E6380", lineHeight: 1.6, maxWidth: 500 }}>
+            Reconstructed from passive packet observation — no kernel modification needed.
+            The sawtooth pattern below is TCP's fundamental congestion control algorithm made visible.
+          </p>
         </div>
 
-        {/* event counters */}
-        <div style={{ background:"#080D1A", border:"1px solid #1C2E4A", borderRadius:8, padding:"12px 14px" }}>
-          <p style={{ fontSize:11, fontWeight:600, color:"#E2E8F5", marginBottom:8 }}>Events detected</p>
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {[
-              { label:"Retransmissions", val:flow.retransmissions, color:"#EF4444" },
-              { label:"Fast recoveries", val:flow.fast_recoveries, color:"#F59E0B" },
-              { label:"RTO timeouts",    val:flow.timeouts_count,  color:"#6B7280" },
-            ].map(row => (
-              <div key={row.label} style={{ display:"flex", justifyContent:"space-between" }}>
-                <span style={{ fontSize:11, color:"#6B7FA3" }}>{row.label}</span>
-                <span style={{ fontSize:11, fontFamily:"'JetBrains Mono'", fontWeight:600,
-                  color: row.val > 0 ? row.color : "#2E4060" }}>
-                  {row.val}
-                </span>
-              </div>
-            ))}
+        {/* current state pill — prominent */}
+        <div style={{ background: info.bg, border: `1px solid ${info.color}66`,
+          borderRadius: 10, padding: "10px 16px", flexShrink: 0,
+          animation: flow.tcp_state === "FAST_RECOVERY" ? "pulse 1.5s infinite" : "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: info.color,
+              boxShadow: `0 0 6px ${info.color}` }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: info.color,
+              fontFamily: "'JetBrains Mono'" }}>
+              {flow.tcp_state.replace("_", " ")}
+            </span>
           </div>
-          {/* time-in-state bar */}
-          {totalTime > 0 && (
-            <div style={{ marginTop:10 }}>
-              <p style={{ fontSize:10, color:"#4E6380", marginBottom:4 }}>Time in state</p>
-              <div style={{ display:"flex", height:6, borderRadius:3, overflow:"hidden", gap:1 }}>
-                {[
-                  { t:flow.time_slow_start,    c:"#10B981" },
-                  { t:flow.time_cong_avoid,    c:"#3B82F6" },
-                  { t:flow.time_fast_recovery, c:"#EF4444" },
-                ].filter(x => x.t > 0).map((x, i) => (
-                  <div key={i} style={{ flex: x.t / totalTime, background:x.c, minWidth:2 }} />
-                ))}
-              </div>
-              <div style={{ display:"flex", gap:8, marginTop:3 }}>
-                {[
-                  { label:"SS",  t:flow.time_slow_start,    c:"#10B981" },
-                  { label:"CA",  t:flow.time_cong_avoid,    c:"#3B82F6" },
-                  { label:"FR",  t:flow.time_fast_recovery, c:"#EF4444" },
-                ].filter(x => x.t > 0).map(x => (
-                  <span key={x.label} style={{ fontSize:9, color:x.c, fontFamily:"'JetBrains Mono'" }}>
-                    {x.label} {x.t.toFixed(1)}s
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          <p style={{ fontSize: 11, color: info.color, opacity: 0.8 }}>
+            cwnd ≈ {(flow.bytes_in_flight / 1024).toFixed(1)} KB
+          </p>
         </div>
       </div>
 
-      {/* sawtooth chart */}
-      <div style={{ background:"#080D1A", border:"1px solid #1C2E4A", borderRadius:8, padding:"12px 14px" }}>
-        <p style={{ fontSize:12, fontWeight:600, color:"#E2E8F5", marginBottom:2 }}>
-          Congestion window — sawtooth chart
-        </p>
-        <p style={{ fontSize:11, color:"#4E6380", marginBottom:10 }}>
-          The characteristic TCP pattern: exponential growth → linear growth → sudden drop on packet loss.
-          Each colored dot shows the TCP state at that moment.
-        </p>
+      {/* ── stat row ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
+        gap: 8, marginBottom: 20 }}>
+        {[
+          { label: "Retransmissions", value: flow.retransmissions, color: flow.retransmissions > 0 ? "#EF4444" : "#10B981", icon: "↩" },
+          { label: "Fast recoveries", value: flow.fast_recoveries, color: flow.fast_recoveries > 0 ? "#F59E0B" : "#10B981", icon: "⚡" },
+          { label: "Loss events",     value: lossCount,            color: lossCount > 0 ? "#EF4444" : "#10B981", icon: "⚠" },
+          { label: "RTO timeouts",    value: flow.timeouts_count,  color: flow.timeouts_count > 0 ? "#6B7280" : "#10B981", icon: "⏱" },
+        ].map(s => (
+          <div key={s.label} style={{ background: "#080D1A", border: "1px solid #1C2E4A",
+            borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
+            <p style={{ fontSize: 20, margin: "0 0 2px" }}>{s.icon}</p>
+            <p style={{ fontSize: 22, fontWeight: 700, fontFamily: "'JetBrains Mono'",
+              color: s.color, margin: "2px 0" }}>{s.value}</p>
+            <p style={{ fontSize: 10, color: "#4E6380" }}>{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── time in state bar ── */}
+      {totalTime > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 11, color: "#4E6380", marginBottom: 6 }}>Time in each state</p>
+          <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", gap: 1 }}>
+            {[
+              { t: flow.time_slow_start,    c: "#10B981", label: "Slow Start" },
+              { t: flow.time_cong_avoid,    c: "#3B82F6", label: "Cong Avoid" },
+              { t: flow.time_fast_recovery, c: "#EF4444", label: "Fast Recovery" },
+            ].filter(x => x.t > 0).map((x, i) => (
+              <div key={i} style={{ flex: x.t / totalTime, background: x.c,
+                minWidth: 4, position: "relative" }}
+                title={`${x.label}: ${x.t.toFixed(1)}s`} />
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 12, marginTop: 5 }}>
+            {[
+              { t: flow.time_slow_start,    c: "#10B981", l: "SS" },
+              { t: flow.time_cong_avoid,    c: "#3B82F6", l: "CA" },
+              { t: flow.time_fast_recovery, c: "#EF4444", l: "FR" },
+            ].filter(x => x.t > 0).map(x => (
+              <span key={x.l} style={{ fontSize: 10, color: x.c, fontFamily: "'JetBrains Mono'" }}>
+                {x.l} {x.t.toFixed(1)}s ({Math.round(x.t/totalTime*100)}%)
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── sawtooth chart — HERO ── */}
+      <div style={{ background: "#080D1A", border: "1px solid #1C2E4A",
+        borderRadius: 10, padding: "16px 16px 12px" }}>
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F5" }}>
+            Congestion window — sawtooth chart
+          </p>
+          <p style={{ fontSize: 11, color: "#4E6380", marginTop: 3, lineHeight: 1.5 }}>
+            The characteristic TCP pattern: exponential growth → linear growth → sudden drop on packet loss.
+            Red vertical lines = packet loss events. Colored background = TCP state region.
+          </p>
+        </div>
         <SawtoothChart history={history} currentState={flow.tcp_state} />
       </div>
     </div>
@@ -645,7 +744,7 @@ function IncidentAnalysis({ data, rec, replayHistory, replayDone, replaySpeed, o
                   <XAxis dataKey="t" tick={{ fontSize:9, fill:"#4E6380" }}/>
                   <YAxis tick={{ fontSize:9, fill:"#4E6380" }} unit="ms"/>
                   <Tooltip contentStyle={{ background:"#0A1020", border:"1px solid #1C2E4A", borderRadius:6, fontSize:11 }}
-                    formatter={(v)=>[`${typeof v==="number"?Math.round(v):0}ms`,"RTT"]}/>
+                    formatter={(v) => [`${typeof v === "number" ? Math.round(v) : 0}ms`, "RTT"]}/>
                   {anomalyIdx > 0 && <ReferenceLine x={replayHistory[anomalyIdx]?.t} stroke="#EF4444" strokeDasharray="3 3"/>}
                   <Area type="monotone" dataKey="rtt" stroke="#EF4444" strokeWidth={2} fill="url(#rG2)"/>
                 </AreaChart>
@@ -667,7 +766,7 @@ function IncidentAnalysis({ data, rec, replayHistory, replayDone, replaySpeed, o
                   <XAxis dataKey="t" tick={{ fontSize:9, fill:"#4E6380" }}/>
                   <YAxis tick={{ fontSize:9, fill:"#4E6380" }} domain={[0,1]}/>
                   <Tooltip contentStyle={{ background:"#0A1020", border:"1px solid #1C2E4A", borderRadius:6, fontSize:11 }}
-                    formatter={(v)=>[`${typeof v==="number"?v.toFixed(3):0}`,"Fairness"]}/>
+                    formatter={(v) => [`${typeof v === "number" ? v.toFixed(3) : 0}`, "Fairness"]}/>
                   <ReferenceLine y={0.9} stroke="#10B981" strokeDasharray="3 3" label={{ value:"healthy", fill:"#10B981", fontSize:9 }}/>
                   <ReferenceLine y={0.6} stroke="#EF4444" strokeDasharray="3 3" label={{ value:"threshold", fill:"#EF4444", fontSize:9 }}/>
                   <Area type="monotone" dataKey="fair" stroke="#F59E0B" strokeWidth={2} fill="url(#fG2)"/>
@@ -1012,7 +1111,7 @@ export default function App() {
                       <XAxis dataKey="t" tick={{ fontSize:10, fill:"#4E6380" }}/>
                       <YAxis tick={{ fontSize:10, fill:"#4E6380" }} unit="ms"/>
                       <Tooltip contentStyle={{ background:"#0A1020", border:"1px solid #1C2E4A", borderRadius:6, fontSize:12 }}
-                        formatter={(v)=>[`${typeof v==="number"?Math.round(v):0}ms`,"RTT"]}/>
+                        formatter={(v) => [`${typeof v === "number" ? Math.round(v) : 0}ms`, "RTT"]}/>
                       <Area type="monotone" dataKey="rtt" stroke="#3B82F6" strokeWidth={2} fill="url(#lG)"/>
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1031,7 +1130,7 @@ export default function App() {
                       <XAxis dataKey="name" tick={{ fontSize:10, fill:"#4E6380" }}/>
                       <YAxis tick={{ fontSize:10, fill:"#4E6380" }} unit="ms"/>
                       <Tooltip contentStyle={{ background:"#0A1020", border:"1px solid #1C2E4A", borderRadius:6, fontSize:12 }}
-                        formatter={(v)=>[`${typeof v==="number"?Math.round(v):0}ms`,"Avg RTT"]}/>
+                        formatter={(v) => [`${typeof v === "number" ? Math.round(v) : 0}ms`, "Avg RTT"]}/>
                       <Bar dataKey="rtt" radius={[4,4,0,0]}>
                         {barData.map((e,i)=><Cell key={i} fill={e.hog?"#EF4444":"#3B82F6"}/>)}
                       </Bar>
