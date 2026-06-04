@@ -87,10 +87,10 @@ const trafficBadge = (type: string) => ({
 
 // TCP state colors (matches C++ tcpStateColor)
 const TCP_STATE_INFO: Record<string, { color: string; bg: string; desc: string }> = {
-  SLOW_START:    { color:"#10B981", bg:"#052E16", desc:"Exponential growth — new connection, cwnd doubling each RTT" },
-  CONG_AVOID:    { color:"#3B82F6", bg:"#0F2040", desc:"Linear growth — cwnd increasing +1 MSS per RTT" },
-  FAST_RECOVERY: { color:"#EF4444", bg:"#450A0A", desc:"Loss recovery — 3 dup ACKs detected, cwnd halved" },
-  TIMEOUT:       { color:"#6B7280", bg:"#1C2433", desc:"RTO fired — cwnd reset to 1 MSS, back to slow start" },
+  SLOW_START:    { color:"#10B981", bg:"#052E16", desc:"Exponential growth - new connection, cwnd doubling each RTT" },
+  CONG_AVOID:    { color:"#3B82F6", bg:"#0F2040", desc:"Linear growth - cwnd increasing +1 MSS per RTT" },
+  FAST_RECOVERY: { color:"#EF4444", bg:"#450A0A", desc:"Loss recovery - 3 dup ACKs detected, cwnd halved" },
+  TIMEOUT:       { color:"#6B7280", bg:"#1C2433", desc:"RTO fired - cwnd reset to 1 MSS, back to slow start" },
   UNKNOWN:       { color:"#4E6380", bg:"#1C2433", desc:"Not enough data yet" },
 };
 
@@ -99,7 +99,7 @@ const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 5, 10];
 const PHASE_INFO: Record<string, { label:string; color:string; title:string; body:string }> = {
   normal:   { label:"Normal",   color:"#10B981", title:"Network is healthy", body:"All devices sharing bandwidth fairly. RTT is low, router buffer empty." },
   building: { label:"Building", color:"#F59E0B", title:"Congestion building", body:"One device consuming more bandwidth. RTT rising as router buffer starts to fill." },
-  peak:     { label:"Peak ⚠",  color:"#EF4444", title:"Bufferbloat — network in crisis", body:"Router buffer full. One device monopolizing bandwidth. RTT has spiked — video calls breaking up, pages loading slowly." },
+  peak:     { label:"Peak ⚠",  color:"#EF4444", title:"Bufferbloat - network in crisis", body:"Router buffer full. One device monopolizing bandwidth. RTT has spiked - video calls breaking up, pages loading slowly." },
   recovery: { label:"Recovery", color:"#60A5FA", title:"Network recovering", body:"Heavy traffic easing. Router buffer draining. RTT coming back down." },
 };
 
@@ -152,7 +152,7 @@ function TCPStateBadge({ state }: { state: string }) {
       whiteSpace: "nowrap",
       animation: state === "FAST_RECOVERY" ? "pulse 1.5s infinite" : "none",
     }}>
-      {state === "UNKNOWN" ? "—" : state.replace("_", " ")}
+      {state === "UNKNOWN" ? "-" : state.replace("_", " ")}
     </span>
   );
 }
@@ -325,9 +325,9 @@ function SawtoothChart({ history, currentState }: {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
         gap: 8, marginTop: 12 }}>
         {[
-          { color: "#10B981", title: "Climb (Slow Start)", desc: "cwnd doubles each RTT — exponential growth" },
-          { color: "#3B82F6", title: "Linear Growth (CA)", desc: "cwnd +1 MSS per RTT — careful increase" },
-          { color: "#EF4444", title: "⚠ Loss → Drop", desc: "3 dup ACKs detected — cwnd halved instantly" },
+          { color: "#10B981", title: "Climb (Slow Start)", desc: "cwnd doubles each RTT - exponential growth" },
+          { color: "#3B82F6", title: "Linear Growth (CA)", desc: "cwnd +1 MSS per RTT - careful increase" },
+          { color: "#EF4444", title: "⚠ Loss → Drop", desc: "3 dup ACKs detected - cwnd halved instantly" },
         ].map(a => (
           <div key={a.title} style={{ background: "#080D1A", border: `1px solid ${a.color}33`,
             borderRadius: 6, padding: "8px 10px" }}>
@@ -362,12 +362,12 @@ function TCPInternalsPanel({ flow }: { flow: Flow }) {
             TCP Congestion State Machine
           </h3>
           <p style={{ fontSize: 11, color: "#4E6380", lineHeight: 1.6, maxWidth: 500 }}>
-            Reconstructed from passive packet observation — no kernel modification needed.
+            Reconstructed from passive packet observation - no kernel modification needed.
             The sawtooth pattern below is TCP's fundamental congestion control algorithm made visible.
           </p>
         </div>
 
-        {/* current state pill — prominent */}
+        {/* current state pill - prominent */}
         <div style={{ background: info.bg, border: `1px solid ${info.color}66`,
           borderRadius: 10, padding: "10px 16px", flexShrink: 0,
           animation: flow.tcp_state === "FAST_RECOVERY" ? "pulse 1.5s infinite" : "none" }}>
@@ -433,12 +433,12 @@ function TCPInternalsPanel({ flow }: { flow: Flow }) {
         </div>
       )}
 
-      {/* ── sawtooth chart — HERO ── */}
+      {/* ── sawtooth chart - HERO ── */}
       <div style={{ background: "#080D1A", border: "1px solid #1C2E4A",
         borderRadius: 10, padding: "16px 16px 12px" }}>
         <div style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F5" }}>
-            Congestion window — sawtooth chart
+            Congestion window - sawtooth chart
           </p>
           <p style={{ fontSize: 11, color: "#4E6380", marginTop: 3, lineHeight: 1.5 }}>
             The characteristic TCP pattern: exponential growth → linear growth → sudden drop on packet loss.
@@ -568,7 +568,7 @@ function PostMortemReport({ pm, rec }: { pm:PostMortem; rec:Recording }) {
             {pm.severity.toUpperCase()}
           </span>
         </div>
-        <p style={{ fontSize:11, color:"#4E6380" }}>{pm.label} — replay complete</p>
+        <p style={{ fontSize:11, color:"#4E6380" }}>{pm.label} - replay complete</p>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
@@ -622,9 +622,9 @@ function PostMortemReport({ pm, rec }: { pm:PostMortem; rec:Recording }) {
           <div style={{ padding:"14px 18px" }}>
             <p style={{ fontSize:12, color:"#94A3B8", lineHeight:1.8 }}>
               Your router queues packets when the network is busy. When one device sends too much,
-              the queue fills up — other packets wait behind it.
+              the queue fills up - other packets wait behind it.
               RTT spikes because packets spend seconds waiting in the queue.
-              This is <span style={{ color:"#A78BFA", fontWeight:600 }}>bufferbloat</span> —
+              This is <span style={{ color:"#A78BFA", fontWeight:600 }}>bufferbloat</span> -
               what Google's <span style={{ color:"#A78BFA", fontWeight:600 }}>BBR algorithm</span> was built to solve.
             </p>
           </div>
@@ -639,7 +639,7 @@ function PostMortemReport({ pm, rec }: { pm:PostMortem; rec:Recording }) {
             { n:"1", title:"Enable QoS on your router", effort:"Easy", impact:"High",
               body:"Set per-device bandwidth limits. Most modern routers have this under 'Quality of Service'." },
             { n:"2", title:"Enable fq_codel or CAKE queue management", effort:"Medium", impact:"Very high",
-              body:"These algorithms prevent any one flow from filling the buffer. Available on OpenWrt/DD-WRT firmware — directly solves bufferbloat." },
+              body:"These algorithms prevent any one flow from filling the buffer. Available on OpenWrt/DD-WRT firmware - directly solves bufferbloat." },
             { n:"3", title:"Immediate: pause the heavy download/stream", effort:"Instant", impact:"Instant",
               body:"Drains the buffer in seconds, restoring normal latency immediately." },
           ].map(step => (
@@ -668,7 +668,7 @@ function PostMortemReport({ pm, rec }: { pm:PostMortem; rec:Recording }) {
   );
 }
 
-// ─── Incident Analysis (inline in recordings tab) ─────────────────────────────
+// ─── Incident Analysis (inline in recordings tab) ───────
 
 function IncidentAnalysis({ data, rec, replayHistory, replayDone, replaySpeed, onStop, onSpeedChange }: {
   data:Snapshot|null; rec:Recording; replayHistory:ReplayPoint[];
@@ -1028,7 +1028,7 @@ export default function App() {
         {error && (
           <div style={{ background:"#450A0A", border:"1px solid #7F1D1D", borderRadius:8,
             padding:"12px 16px", color:"#FCA5A5", marginBottom:20, fontSize:13 }}>
-            ⚠ {error} — run: <span style={{ fontFamily:"'JetBrains Mono'", fontSize:11, color:"#10B981" }}>
+            ⚠ {error} - run: <span style={{ fontFamily:"'JetBrains Mono'", fontSize:11, color:"#10B981" }}>
               python3 mock_backend.py
             </span>
           </div>
@@ -1050,7 +1050,7 @@ export default function App() {
               <Card>
                 <div style={{ padding:"16px 18px" }}>
                   <p style={{ fontSize:10, color:"#4E6380", textTransform:"uppercase", letterSpacing:"0.08em" }}>Fairness index</p>
-                  <p style={{ fontSize:10, color:"#4E6380", marginTop:2, marginBottom:8 }}>How evenly bandwidth is shared — 1.0 = perfect</p>
+                  <p style={{ fontSize:10, color:"#4E6380", marginTop:2, marginBottom:8 }}>How evenly bandwidth is shared - 1.0 = perfect</p>
                   <p style={{ fontSize:32, fontWeight:600, fontFamily:"'JetBrains Mono'", color:st.color }}>{fi.toFixed(3)}</p>
                   <div style={{ background:"#1C2E4A", borderRadius:3, height:4, marginTop:8 }}>
                     <div style={{ width:`${fi*100}%`, background:st.color, height:4, borderRadius:3, transition:"width .5s" }}/>
@@ -1064,9 +1064,9 @@ export default function App() {
               <Card>
                 <div style={{ padding:"16px 18px" }}>
                   <p style={{ fontSize:10, color:"#4E6380", textTransform:"uppercase", letterSpacing:"0.08em" }}>Worst RTT</p>
-                  <p style={{ fontSize:10, color:"#4E6380", marginTop:2, marginBottom:8 }}>Round trip time — under 50ms is healthy</p>
+                  <p style={{ fontSize:10, color:"#4E6380", marginTop:2, marginBottom:8 }}>Round trip time - under 50ms is healthy</p>
                   <p style={{ fontSize:32, fontWeight:600, fontFamily:"'JetBrains Mono'", color:rttColor(maxRtt) }}>
-                    {maxRtt>0?`${Math.round(maxRtt)}ms`:"—"}
+                    {maxRtt>0?`${Math.round(maxRtt)}ms`:"-"}
                   </p>
                   <p style={{ fontSize:10, color:rttColor(maxRtt), marginTop:6, fontWeight:600 }}>
                     {maxRtt===0?"No data yet":maxRtt>300?"✕ Severe congestion":maxRtt>100?"⚠ Elevated":"✓ Healthy"}
@@ -1145,7 +1145,7 @@ export default function App() {
               <Card style={{ marginBottom:20 }}>
                 <CardHeader
                   title="Active TCP connections"
-                  sub="Click any row to expand the TCP congestion state machine — sawtooth chart and event counters per flow."
+                  sub="Click any row to expand the TCP congestion state machine - sawtooth chart and event counters per flow."
                 />
                 <div style={{ overflowX:"auto" }}>
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
@@ -1202,7 +1202,7 @@ export default function App() {
             {/* topology */}
             {hosts.length > 0 && (
               <Card>
-                <CardHeader title="Network topology" sub="Inferred from TTL — no packets sent. Hops = routers between you and device."/>
+                <CardHeader title="Network topology" sub="Inferred from TTL - no packets sent. Hops = routers between you and device."/>
                 <div style={{ overflowX:"auto" }}>
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                     <thead>
